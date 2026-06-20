@@ -131,6 +131,7 @@ def main():
     final = assemble_video(
         script=rich_script, footage_paths=footage_paths, audio_paths=audio_paths,
         output_dir=job, is_shorts=False, burn_captions=True,
+        add_title_card=False,  # la pantalla de bienvenida ya es la intro
     )
     print(f"\n  LISTO -> {final}")
     return final

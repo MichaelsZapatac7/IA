@@ -41,9 +41,13 @@ def assemble_video(
     logo_path: Optional[Path] = None,
     is_shorts: bool = False,
     burn_captions: bool = True,
+    add_title_card: bool = True,
 ) -> Path:
     """
     Full assembly pipeline. Returns path to the final MP4.
+
+    add_title_card: si False, no superpone el título arriba (útil cuando ya
+    existe una pantalla de bienvenida/branding al inicio).
     """
     if not _check_ffmpeg():
         raise EnvironmentError(
@@ -156,19 +160,20 @@ def assemble_video(
         except Exception as e:
             print(f"  [warn] Subtitles failed: {e} — continuing without captions")
 
-    # ── Step 5: intro title card ────────────────────────────────────────────
-    print("[assembler] Adding title card...")
-    titled = work_dir / "titled.mp4"
-    safe_title = script.title.replace("'", "\\'").replace(":", "-")[:40]
-    add_text_overlay(
-        current, titled,
-        text=safe_title,
-        y="h*0.05",
-        font_size=52 if not is_shorts else 40,
-        start=0,
-        end=5,
-    )
-    current = titled
+    # ── Step 5: intro title card (optional) ─────────────────────────────────
+    if add_title_card:
+        print("[assembler] Adding title card...")
+        titled = work_dir / "titled.mp4"
+        safe_title = script.title.replace("'", "\\'").replace(":", "-")[:40]
+        add_text_overlay(
+            current, titled,
+            text=safe_title,
+            y="h*0.05",
+            font_size=52 if not is_shorts else 40,
+            start=0,
+            end=5,
+        )
+        current = titled
 
     # ── Step 6: fade in/out ─────────────────────────────────────────────────
     faded = work_dir / "faded.mp4"
