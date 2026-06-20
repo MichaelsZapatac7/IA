@@ -1,7 +1,9 @@
 """
 Construye el video ENRIQUECIDO:
   - Bienvenida hablada del canal MZSHARD (intro con branding)
-  - Imágenes de APOYO diseñadas (Pillow) por cada IA, animadas con Ken Burns
+  - Imágenes de APOYO: fotos reales de Pexels mezcladas con tarjetas diseñadas en Pillow
+    (si hay PEXELS_API_KEY la foto se descarga y se mezcla como fondo detrás de la tarjeta)
+  - Animación Ken Burns en cada clip
   - Outro de suscripción
   - Voz: ElevenLabs si hay red/keys; si no, Piper TTS local (fallback)
 
@@ -12,6 +14,7 @@ Ejecutar desde la raíz del repo:
 import sys
 import subprocess
 from pathlib import Path
+from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -42,6 +45,53 @@ TAGLINES = {
     "7. ELEVENLABS": ("La voz más realista del mundo", "ai"),
     "SUSCRÍBETE": ("", "outro"),
 }
+
+
+def _fetch_pexels_photo(query: str, out: Path) -> Optional[Path]:
+    """
+    Download a Pexels photo for the visual cue query.
+    Uses the first 4 words of the cue for a cleaner search term.
+    Returns the saved path, or None if unavailable (no key or network error).
+    """
+    if not cfg.pexels_api_key:
+        return None
+    try:
+        from youtube_pipeline.generators.footage import search_pexels_photo, download_photo
+        short_q = " ".join(query.split()[:4])
+        info = search_pexels_photo(short_q)
+        if info and info.get("url"):
+            return download_photo(info["url"], out)
+    except Exception as e:
+        print(f"    [pexels foto] {str(e)[:70]}")
+    return None
+
+
+def _blend_photo_card(card_path: Path, photo_path: Path, out_path: Path) -> Path:
+    """
+    Composite a real Pexels photo as a soft background behind the designed card.
+
+    The photo is darkened (brightness 0.45) so the branded text stays readable,
+    then blended: 38% photo + 62% card design. Result: real imagery shows through
+    the MZSHARD branding — more cinematic than a plain gradient background.
+    """
+    from PIL import Image, ImageEnhance
+    card = Image.open(card_path).convert("RGB")
+    W, H = card.size
+    photo = Image.open(photo_path).convert("RGB")
+    # Crop photo to card aspect ratio then resize (avoid distortion)
+    pw, ph = photo.size
+    card_ratio = W / H
+    if pw / ph > card_ratio:
+        new_w = int(ph * card_ratio)
+        photo = photo.crop(((pw - new_w) // 2, 0, (pw + new_w) // 2, ph))
+    else:
+        new_h = int(pw / card_ratio)
+        photo = photo.crop((0, (ph - new_h) // 2, pw, (ph + new_h) // 2))
+    photo = photo.resize((W, H), Image.LANCZOS)
+    photo_dark = ImageEnhance.Brightness(photo).enhance(0.45)
+    result = Image.blend(photo_dark, card, alpha=0.62)
+    result.save(out_path, quality=95)
+    return out_path
 
 
 def _audio_dur(path: Path) -> float:
@@ -109,7 +159,17 @@ def main():
                 name = label.split(".", 1)[1].strip() if "." in label else label
                 make_support_image(num.zfill(2), name, tagline, img_path, index=i)
 
-        # 3) Ken Burns (alterna zoom in/out para variar)
+        # 3) Intentar mezclar con foto real de Pexels (si hay PEXELS_API_KEY)
+        visual_cue = seg.get("visual_cue", label)
+        photo_raw = job / "img" / f"photo_{i:03d}.jpg"
+        if label not in ("WELCOME", "SUSCRÍBETE"):
+            photo = _fetch_pexels_photo(visual_cue, photo_raw)
+            if photo:
+                blended = job / "img" / f"blended_{i:03d}.png"
+                img_path = _blend_photo_card(img_path, photo, blended)
+                print(f"    foto Pexels mezclada con tarjeta")
+
+        # 4) Ken Burns (alterna zoom in/out para variar)
         clip = job / "clips" / f"clip_{i:03d}.mp4"
         ken_burns(img_path, clip, duration=dur + 0.5, width=W, height=H, fps=FPS,
                   direction="in" if i % 2 == 0 else "out")

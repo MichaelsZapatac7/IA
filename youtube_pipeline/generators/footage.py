@@ -1,6 +1,6 @@
 """
-Video footage sourcing from Pexels (free stock) and Higgsfield (AI-generated).
-Each segment's visual_cue is used to find or generate relevant footage.
+Video footage and photo sourcing from Pexels (free stock) and Higgsfield (AI-generated).
+Each segment's visual_cue is used to find or generate relevant footage/photos.
 """
 
 import os
@@ -20,6 +20,7 @@ from ..config import cfg
 
 PEXELS_SEARCH_URL = "https://api.pexels.com/videos/search"
 PEXELS_POPULAR_URL = "https://api.pexels.com/videos/popular"
+PEXELS_PHOTO_URL = "https://api.pexels.com/v1/search"
 
 
 def search_pexels_video(
@@ -69,6 +70,53 @@ def search_pexels_video(
                 "video_id": video["id"],
             }
     return None
+
+
+def search_pexels_photo(
+    query: str,
+    per_page: int = 5,
+    orientation: str = "landscape",
+) -> Optional[dict]:
+    """
+    Search Pexels for a photo matching the query.
+    Returns metadata dict with 'url', 'width', 'height', 'photographer' or None.
+    Uses the /v1/search photos endpoint (NOT the videos endpoint).
+    """
+    if not cfg.pexels_api_key:
+        return None
+    resp = requests.get(
+        PEXELS_PHOTO_URL,
+        params={
+            "query": query,
+            "per_page": per_page,
+            "orientation": orientation,
+            "size": "large",
+        },
+        headers={"Authorization": cfg.pexels_api_key},
+        timeout=15,
+    )
+    resp.raise_for_status()
+    photos = resp.json().get("photos", [])
+    if not photos:
+        return None
+    photo = photos[0]
+    src = photo.get("src", {})
+    url = src.get("large2x") or src.get("large") or src.get("original")
+    return {
+        "url": url,
+        "width": photo.get("width", 1920),
+        "height": photo.get("height", 1080),
+        "photographer": photo.get("photographer", ""),
+    }
+
+
+def download_photo(url: str, output_path: Path) -> Path:
+    """Download a photo (JPEG/PNG) from a URL."""
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    resp = requests.get(url, timeout=60)
+    resp.raise_for_status()
+    output_path.write_bytes(resp.content)
+    return output_path
 
 
 def download_video(url: str, output_path: Path) -> Path:

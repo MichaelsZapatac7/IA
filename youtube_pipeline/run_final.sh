@@ -25,7 +25,23 @@ fi
 echo "== Instalando dependencias de Python =="
 pip3 install -q -r youtube_pipeline/requirements.txt
 
-# 3) Verificar que las claves estén presentes
+# 3) Intentar instalar piper-tts como motor de voz de respaldo
+#    (se usa solo si ElevenLabs no está disponible)
+if ! command -v piper >/dev/null 2>&1; then
+  echo "== Instalando piper-tts (fallback de voz local) =="
+  pip3 install -q piper-tts 2>/dev/null || true
+fi
+
+# 4) Descargar voces de Piper desde GitHub (si piper está disponible y faltan voces)
+if command -v piper >/dev/null 2>&1; then
+  VOICE_DIR="youtube_pipeline/assets/piper_voices"
+  if [ ! -f "$VOICE_DIR/es-carlfm-x-low.onnx" ]; then
+    echo "== Descargando voces de Piper (español) =="
+    python3 -m youtube_pipeline.generators.download_piper_voices || true
+  fi
+fi
+
+# 5) Verificar que las claves estén presentes
 python3 - <<'PY'
 from youtube_pipeline.config import cfg
 import sys
@@ -41,9 +57,10 @@ if faltan:
 print("Claves OK. Voz ElevenLabs:", cfg.elevenlabs_voice_id)
 PY
 
-# 4) Producir el video enriquecido (bienvenida MZSHARD + imágenes de apoyo +
-#    voz: usa ElevenLabs automáticamente si hay red/keys, si no Piper)
-echo "== Generando video final =="
+# 6) Producir el video enriquecido
+#    - bienvenida MZSHARD + tarjetas diseñadas + fotos reales de Pexels como fondo
+#    - voz: ElevenLabs (prioridad) o Piper TTS (fallback automático)
+echo "== Generando video final con fotos Pexels + diseño MZSHARD =="
 python3 -m youtube_pipeline.examples.build_rich
 
 echo ""
