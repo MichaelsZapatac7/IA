@@ -171,19 +171,28 @@ def add_subtitles(
     video_path: Path,
     srt_path: Path,
     output_path: Path,
-    font_size: int = 28,
-    font_color: str = "white",
-    outline_color: str = "black",
+    font_size: int = 18,
+    font_color: str = "&H00FFFFFF",   # ASS = &HAABBGGRR (white)
+    outline_color: str = "&H00000000",  # black
     position: str = "bottom",
+    margin_v: int = 60,
 ) -> Path:
-    """Burn subtitles into the video using the ASS/SRT file."""
-    margin_v = 30 if position == "bottom" else 10
+    """
+    Burn subtitles into the video.
+
+    Note on colors: libass uses the ASS format &HAABBGGRR (alpha-blue-green-red),
+    NOT names like 'white'. Font size is in ASS script units (PlayResY default 288),
+    so ~18 renders nicely on 1080p without overpowering the frame.
+    """
+    alignment = 2 if position == "bottom" else 8  # 2=bottom-center, 8=top-center
     _run([
         "ffmpeg", "-y", "-i", str(video_path),
         "-vf", (
             f"subtitles={srt_path}:force_style='"
-            f"FontSize={font_size},PrimaryColour=&H00{font_color}&,"
-            f"OutlineColour=&H00{outline_color}&,Outline=2,MarginV={margin_v}'"
+            f"FontName=DejaVu Sans,FontSize={font_size},"
+            f"PrimaryColour={font_color},OutlineColour={outline_color},"
+            f"BorderStyle=1,Outline=2,Shadow=1,"
+            f"Alignment={alignment},MarginV={margin_v}'"
         ),
         "-c:a", "copy",
         str(output_path),
