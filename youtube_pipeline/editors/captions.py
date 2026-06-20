@@ -81,8 +81,9 @@ def segments_to_srt(segments: list[dict], audio_paths: list[Path], output_path: 
     """
     lines = []
     cursor = 0.0
+    cue_index = 1
 
-    for i, (segment, audio_path) in enumerate(zip(segments, audio_paths), start=1):
+    for segment, audio_path in zip(segments, audio_paths):
         # Estimate duration from audio file via ffprobe
         try:
             result = subprocess.run(
@@ -94,29 +95,48 @@ def segments_to_srt(segments: list[dict], audio_paths: list[Path], output_path: 
         except Exception:
             duration = segment.get("duration_seconds", 10)
 
-        start = _seconds_to_srt_time(cursor)
-        end = _seconds_to_srt_time(cursor + duration)
         text = segment.get("text", "").strip()
+        # Break the segment into short caption phrases (~max 7 words / 42 chars)
+        phrases = _split_into_phrases(text, max_words=7, max_chars=42)
+        if not phrases:
+            cursor += duration
+            continue
 
-        # Split long lines for readability
-        words = text.split()
-        chunks = []
-        chunk = []
-        for word in words:
-            chunk.append(word)
-            if len(" ".join(chunk)) > 50:
-                chunks.append(" ".join(chunk))
-                chunk = []
-        if chunk:
-            chunks.append(" ".join(chunk))
-        display_text = "\n".join(chunks)
+        # Distribute the segment duration across phrases proportionally to length
+        total_chars = sum(len(p) for p in phrases) or 1
+        sub_cursor = cursor
+        for phrase in phrases:
+            share = len(phrase) / total_chars
+            phrase_dur = max(0.8, duration * share)
+            start = _seconds_to_srt_time(sub_cursor)
+            end = _seconds_to_srt_time(min(cursor + duration, sub_cursor + phrase_dur))
+            lines.append(f"{cue_index}\n{start} --> {end}\n{phrase}\n")
+            cue_index += 1
+            sub_cursor += phrase_dur
 
-        lines.append(f"{i}\n{start} --> {end}\n{display_text}\n")
         cursor += duration
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("\n".join(lines), encoding="utf-8")
     return output_path
+
+
+def _split_into_phrases(text: str, max_words: int = 7, max_chars: int = 42) -> list[str]:
+    """Split text into short caption-sized phrases, preferring sentence breaks."""
+    words = text.split()
+    phrases = []
+    chunk = []
+    for word in words:
+        chunk.append(word)
+        candidate = " ".join(chunk)
+        # Flush on length limits or natural punctuation breaks
+        ends_sentence = word.endswith((".", "!", "?", ":"))
+        if len(chunk) >= max_words or len(candidate) >= max_chars or ends_sentence:
+            phrases.append(candidate)
+            chunk = []
+    if chunk:
+        phrases.append(" ".join(chunk))
+    return phrases
 
 
 def _seconds_to_srt_time(seconds: float) -> str:
