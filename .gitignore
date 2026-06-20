@@ -30,3 +30,10 @@ notification.mp3
 .vscode
 /extensions
 
+
+# YouTube pipeline — proteger API keys y archivos generados
+youtube_pipeline/.env
+.env
+youtube_pipeline/output/
+youtube_pipeline/assets/
+**/_work/
