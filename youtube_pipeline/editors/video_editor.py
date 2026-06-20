@@ -282,6 +282,44 @@ def add_logo_watermark(
     return output_path
 
 
+def ken_burns(
+    image_path: Path,
+    output_path: Path,
+    duration: float,
+    width: int = 1920,
+    height: int = 1080,
+    fps: int = 30,
+    zoom_start: float = 1.0,
+    zoom_end: float = 1.12,
+    direction: str = "in",
+) -> Path:
+    """
+    Anima una imagen estática con un zoom/pan lento (efecto Ken Burns)
+    para darle vida. Devuelve un clip de video de la duración pedida.
+    """
+    total_frames = int(duration * fps)
+    if direction == "in":
+        z_expr = f"min(zoom+{(zoom_end - zoom_start)/total_frames:.6f},{zoom_end})"
+    else:
+        z_expr = f"max(zoom-{(zoom_end - zoom_start)/total_frames:.6f},{zoom_start})"
+
+    # Render a 2x para que el zoom no pixele, luego escala a destino
+    _run([
+        "ffmpeg", "-y",
+        "-loop", "1", "-i", str(image_path),
+        "-vf", (
+            f"scale={width*2}:{height*2},"
+            f"zoompan=z='{z_expr}':d={total_frames}"
+            f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
+            f":s={width}x{height}:fps={fps},"
+            f"trim=duration={duration},setpts=PTS-STARTPTS"
+        ),
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-t", str(duration),
+        str(output_path),
+    ], f"ken burns {image_path.name} ({duration:.1f}s)")
+    return output_path
+
+
 def export_final(
     video_path: Path,
     output_path: Path,
