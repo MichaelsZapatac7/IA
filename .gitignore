@@ -37,3 +37,5 @@ youtube_pipeline/.env
 youtube_pipeline/output/
 youtube_pipeline/assets/
 **/_work/
+/test/stdout.txt
+/test/stderr.txt
