@@ -29,5 +29,13 @@ notification.mp3
 /textual_inversion
 .vscode
 /extensions
+
+
+# YouTube pipeline — proteger API keys y archivos generados
+youtube_pipeline/.env
+.env
+youtube_pipeline/output/
+youtube_pipeline/assets/
+**/_work/
 /test/stdout.txt
 /test/stderr.txt
