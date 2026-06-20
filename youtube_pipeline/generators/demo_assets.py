@@ -17,6 +17,27 @@ from pathlib import Path
 from ..config import cfg
 
 
+# Voz Piper (calidad casi natural) si el modelo está disponible; si no, espeak.
+PIPER_VOICES_DIR = cfg.assets_dir / "piper_voices"
+DEFAULT_PIPER_MODEL = PIPER_VOICES_DIR / "es-carlfm-x-low.onnx"
+
+
+def _piper_available() -> bool:
+    return shutil.which("piper") is not None and DEFAULT_PIPER_MODEL.exists()
+
+
+def piper_voiceover(text: str, output_path: Path, model_path: Path = None) -> Path:
+    """Genera voz con Piper TTS (local, calidad casi natural). Devuelve .wav."""
+    model_path = model_path or DEFAULT_PIPER_MODEL
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    wav_path = output_path.with_suffix(".wav")
+    subprocess.run(
+        ["piper", "-m", str(model_path), "-f", str(wav_path)],
+        input=text, text=True, check=True, capture_output=True,
+    )
+    return wav_path
+
+
 def demo_voiceover(text: str, output_path: Path, voice: str = "es", speed: int = 155) -> Path:
     """Genera audio de voz con espeak-ng (local, sin key). Devuelve un .wav."""
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -29,16 +50,25 @@ def demo_voiceover(text: str, output_path: Path, voice: str = "es", speed: int =
 
 
 def generate_demo_voiceovers(segments: list[dict], output_dir: Path) -> list[Path]:
-    """Un archivo de voz por segmento, usando espeak-ng."""
+    """
+    Un archivo de voz por segmento. Usa Piper TTS si está disponible
+    (mucho mejor), si no cae a espeak-ng.
+    """
     output_dir.mkdir(parents=True, exist_ok=True)
+    use_piper = _piper_available()
+    engine = "Piper" if use_piper else "espeak"
+    print(f"  [voz] Motor: {engine}")
     paths = []
     for i, seg in enumerate(segments):
         text = seg.get("text", "").strip()
         if not text:
             continue
         out = output_dir / f"segment_{i:03d}.wav"
-        print(f"  [demo-voz] Segmento {i+1}/{len(segments)}")
-        demo_voiceover(text, out)
+        print(f"  [{engine}] Segmento {i+1}/{len(segments)}")
+        if use_piper:
+            piper_voiceover(text, out)
+        else:
+            demo_voiceover(text, out)
         paths.append(out)
     return paths
 
